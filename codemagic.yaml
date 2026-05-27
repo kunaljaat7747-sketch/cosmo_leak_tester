@@ -7,45 +7,63 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
+      cocoapods: default
 
     scripts:
-      - name: Flutter version check
-        script: flutter --version
+      - name: Check Flutter version
+        script: |
+          flutter --version
 
-      - name: Get Flutter dependencies
-        script: flutter pub get
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
 
-      - name: Generate iOS Flutter files
+      - name: Clean old builds
+        script: |
+          flutter clean
+          flutter pub get
+
+      - name: Generate iOS platform files
         script: |
           flutter precache --ios
-          cd ios
-          flutter pub get
-          cd ..
 
-      - name: Set iOS deployment target
+      - name: Set minimum iOS version
         script: |
           if [ -f ios/Podfile ]; then
-            sed -i '' "s/# platform :ios, '12.0'/platform :ios, '13.0'/" ios/Podfile || true
+            sed -i '' "s/platform :ios, '11.0'/platform :ios, '13.0'/g" ios/Podfile || true
+            sed -i '' "s/platform :ios, '12.0'/platform :ios, '13.0'/g" ios/Podfile || true
           fi
 
-      - name: Install CocoaPods
+      - name: Install CocoaPods dependencies
         script: |
           cd ios
-          pod install --repo-update
+          rm -rf Pods Podfile.lock
+          pod repo update
+          pod install
           cd ..
 
-      - name: Build unsigned IPA
+      - name: Build unsigned iOS app
         script: |
           flutter build ios --release --no-codesign
-          
+
+      - name: Create IPA for Sideloadly
+        script: |
           mkdir -p Payload
-          cp -r build/ios/iphoneos/Runner.app Payload/Runner.app
-          
-          # Mac ka ditto command - symlinks sahi rehte hain
-          ditto -c -k --sequesterRsrc --keepParent Payload cosmo_leak_tester.ipa
-          cp cosmo_leak_tester.ipa build/ios/cosmo_leak_tester.ipa
-          
-          echo "✅ IPA created!"
+          cp -R build/ios/iphoneos/Runner.app Payload/Runner.app
+
+          cd Payload
+          zip -r ../cosmo_leak_tester.ipa Runner.app
+          cd ..
+
+          mkdir -p build/ios/ipa
+          mv cosmo_leak_tester.ipa build/ios/ipa/
+
+          echo "✅ IPA created successfully"
 
     artifacts:
-      - build/ios/cosmo_leak_tester.ipa
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
